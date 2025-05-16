@@ -1,0 +1,4 @@
+package com.bruce.auth.dtos;
+
+public class ErrorResponse {
+}

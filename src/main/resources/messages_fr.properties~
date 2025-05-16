@@ -1,0 +1,13 @@
+# Client Errors
+error.client.unauthorized_access=Accès non autorisé à la ressource client
+error.client.only_self_access=Vous ne pouvez accéder qu'à vos propres informations
+error.client.only_self_update=Vous ne pouvez mettre à jour que vos propres informations
+error.client.only_self_delete=Vous ne pouvez supprimer que votre propre compte
+error.client.not_found=Client introuvable
+error.client.registration_failed=L'enregistrement du client a échoué
+error.client.login_failed=Échec de la connexion
+
+# General Errors
+error.general.internal_server_error=Une erreur inattendue s'est produite
+error.general.bad_request=Requête invalide
+error.general.validation_error=Échec de la validation

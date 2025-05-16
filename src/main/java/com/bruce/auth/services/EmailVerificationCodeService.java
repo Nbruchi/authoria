@@ -1,0 +1,118 @@
+package com.bruce.auth.services;
+
+import com.bruce.auth.constants.ErrorMessages;
+import com.bruce.auth.exceptions.EmailNotFoundException;
+import com.bruce.auth.models.Client;
+import com.bruce.auth.models.EmailVerificationCode;
+import com.bruce.auth.repos.ClientRepo;
+import com.bruce.auth.repos.EmailVerificationCodeRepo;
+import jakarta.mail.MessagingException;
+import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+public class EmailVerificationCodeService {
+    private final ClientRepo clientRepo;
+    private final EmailVerificationCodeRepo codeRepo;
+    private final EmailSenderService emailService;
+
+    public EmailVerificationCodeService(ClientRepo clientRepo, EmailVerificationCodeRepo codeRepo, EmailSenderService emailService) {
+        this.clientRepo = clientRepo;
+        this.codeRepo = codeRepo;
+        this.emailService = emailService;
+    }
+
+    private String generateVerificationCode(){
+        SecureRandom random = new SecureRandom();
+        Integer code = 100000 + random.nextInt(900000);
+        return String.valueOf(code);
+    }
+
+    @Transactional
+    public EmailVerificationCode initiateEmailVerification(UUID clientId,String email) throws MessagingException, IOException {
+        Optional<Client> existingClient = clientRepo.findByEmail(email);
+        if(existingClient.isPresent()){
+            throw new IllegalArgumentException(ErrorMessages.Email.EMAIL_IN_USE);
+        }
+
+        // Find client
+        Client client = clientRepo.findById(clientId).orElseThrow(() -> new IllegalArgumentException(ErrorMessages.Email.CODE_NOT_FOUND));
+
+        // Generate verification code
+        String code = generateVerificationCode();
+        emailService.sendVerificationCode(email, code, client.getFirstName());
+
+        EmailVerificationCode verificationCode = new EmailVerificationCode();
+        verificationCode.setCode(code);
+        verificationCode.setClient(client);
+        verificationCode.setEmail(email);
+
+        verificationCode = codeRepo.save(verificationCode);
+        emailService.sendVerificationCode(email, verificationCode.getCode(), verificationCode.getClient().getFirstName());
+
+        return verificationCode;
+    }
+
+    @Transactional
+    public void verifyEmailCode(UUID clientId, String email, String code) {
+        Optional<EmailVerificationCode> optionalCode = codeRepo.findByClientIdAndEmailAndCode(clientId, email, code);
+
+        if (optionalCode.isEmpty()) {
+            throw new IllegalArgumentException(ErrorMessages.Email.CODE_INVALID);
+        }
+
+        EmailVerificationCode verificationCode = optionalCode.get();
+
+        // Check if code is expired
+        if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            codeRepo.delete(verificationCode);
+            throw new IllegalArgumentException(ErrorMessages.Email.CODE_EXPIRED);
+        }
+
+        Client client = verificationCode.getClient();
+        client.setEmail(email);
+        client.setEmailVerified(true);
+        clientRepo.save(client);
+
+        verificationCode.setUsed(true);
+        verificationCode.setVerifiedAt(LocalDateTime.now());
+        codeRepo.save(verificationCode);
+
+    }
+
+    public void verifyEmail(UUID clientId, String email){
+        if (clientRepo.findByEmail(email).isEmpty()){
+            throw new EmailNotFoundException(ErrorMessages.Email.EMAIL_NOT_FOUND);
+        }
+
+        String verificationCode = generateVerificationCode();
+
+        emailService.sendVerificationCode(email,verificationCode,clientId.toString());
+
+        Client client = clientRepo.findById(clientId).orElseThrow(() -> new IllegalArgumentException(ErrorMessages.Client.NOT_FOUND));
+
+        codeRepo.save(new EmailVerificationCode(verificationCode,client,email,false));
+    }
+
+    public void confirmEmailVerification(UUID clientId, String email, String code){
+        EmailVerificationCode storedCode = codeRepo.findByClientIdAndEmailAndCode(clientId,email,code).orElseThrow(() -> new IllegalArgumentException(ErrorMessages.Email.CODE_INVALID));
+
+        if (!storedCode.getCode().equals(code)){
+            throw new IllegalArgumentException(ErrorMessages.Email.CODE_INVALID);
+        }
+
+        Client client = clientRepo.findById(clientId).orElseThrow(() -> new IllegalArgumentException(ErrorMessages.Client.NOT_FOUND));
+
+        client.setEmailVerified(true);
+
+        clientRepo.save(client);
+
+        codeRepo.delete(storedCode);
+    }
+}

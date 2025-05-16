@@ -1,0 +1,55 @@
+package com.bruce.auth.services;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+
+import org.springframework.stereotype.Service;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
+
+import java.time.Year;
+
+@Service
+public class EmailSenderService {
+    @Value("${spring.mail.username}")
+    private String emailSource;
+
+    private final JavaMailSender mailSender;
+    private final TemplateEngine templateEngine;
+
+    public EmailSenderService(JavaMailSender mailSender, TemplateEngine templateEngine) {
+        this.mailSender = mailSender;
+        this.templateEngine = templateEngine;
+    }
+
+    public void sendVerificationCode(String to, String verificationCode, String name) {
+        try{
+            Context context = new Context();
+            context.setVariable("name", name);
+            context.setVariable("email", to);
+            context.setVariable("verificationCode", verificationCode);
+            context.setVariable("currentYear", Year.now().getValue());
+
+            String htmlContent = templateEngine.process("verification-code", context);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(emailSource);
+            helper.setTo(to);
+            helper.setSubject("Email Verification Code");
+
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+        }catch (MessagingException exception){
+            Logger logger = LoggerFactory.getLogger(EmailSenderService.class);
+            logger.error("Error sending email", exception);
+        }
+    }
+}

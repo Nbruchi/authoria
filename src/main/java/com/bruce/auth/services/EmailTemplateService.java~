@@ -1,0 +1,17 @@
+package com.bruce.auth.services;
+
+import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+
+@Service
+public class EmailTemplateService {
+    @Value("classpath:templates/verification-code.html")
+    private Resource resource;
+    private final JavaMailSender mailSender;
+
+    public EmailTemplateService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
+}
